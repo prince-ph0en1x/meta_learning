@@ -1,52 +1,104 @@
-// http://iamtrask.github.io/2015/07/12/basic-python-network/
-
 import java.io.*;
+import java.text.*;
 class nn
 {
 	public static void main(String args[])
 	{
-		int i, j, iter;
+		// For Training
 		// input dataset
 		double tsI[][] = {{0,0,1},{0,1,1},{1,0,1},{1,1,1}};
 		// output dataset 
-		int tsO[][] = {{0},{0},{1},{1}};
-		double syn0[][] = new double[tsI[0].length][1];
+		double tsO[][] = {{0},{0},{1},{1}};//{{0},{1},{1},{0}};
+		
+		int layers = 2;		// Adjustable - number of layers
+		int nodes[] = new int[layers];
+		int i, j;
+		for (i = 0; i < layers-1; i++)
+			nodes[i] = 4;	// Adjustable - layer structure
+		nodes[layers-1] = 1;// Last layer converges to single output
+		
+		// iterate over array of 2D array pointers
+		double syn0[][] = new double[tsI[0].length][nodes[0]];
+		double syn1[][] = new double[nodes[0]][nodes[1]];
+		
 		// initialize weights randomly with mean 0
 		for (i = 0; i < syn0.length; i++)
-			syn0[i][0] = 2*Math.random()-1;
-		double l0[][] = new double[tsI.length][tsI[0].length];
-		double l1[][] = new double[tsO.length][tsO[0].length];
-		double l1_error[][] = new double[tsO.length][tsO[0].length];
-		double l1_delta[][] = new double[tsO.length][tsO[0].length];
-		double syn0_updt[][] = new double[tsI[0].length][1];
+			for (j = 0; j < syn0[0].length; j++)
+				syn0[i][j] = 2*Math.random()-1;
+		for (i = 0; i < syn1.length; i++)
+			for (j = 0; j < syn1[0].length; j++)
+				syn1[i][j] = 2*Math.random()-1;
+		
+		double l0[][] = new double[tsI.length][tsI[0].length];	// same as ts0
+		double l1[][] = new double[tsI.length][nodes[0]];
+		double l2[][] = new double[tsI.length][nodes[1]];
+		
+		double l1_error[][] = new double[tsI.length][nodes[0]];
+		double l1_delta[][] = new double[tsI.length][nodes[0]];
+		
+		double l2_error[][] = new double[tsI.length][nodes[1]];
+		double l2_delta[][] = new double[tsI.length][nodes[1]];
+		
+		double syn0_updt[][] = new double[tsI[0].length][nodes[0]];
+		double syn1_updt[][] = new double[nodes[0]][nodes[1]];
 		l0 = tsI;	
-		for (iter = 0; iter < 10000; iter++) {
+		for (int iter = 0; iter < 100000; iter++) {
 			// forward propagation
-			l1 = dot(l0,syn0);
-			for (i = 0; i < l1.length; i++)
-				for (j = 0; j < l1[0].length; j++)
-					l1[i][j] = nonlin(l1[i][j],false);
+			l1 = nonlin(dot(l0,syn0),false);
+			l2 = nonlin(dot(l1,syn1),false);
 			// how much did we miss?
-			for (i = 0; i < l1.length; i++)
-				for (j = 0; j < l1[0].length; j++)
-					l1_error[i][j] = tsO[i][j]-l1[i][j];
+			l2_error = sub(tsO,l2);
 			// multiply how much we missed by the slope of the sigmoid at the values in l1
-			for (i = 0; i < l1.length; i++)
-				for (j = 0; j < l1[0].length; j++)
-					l1_delta[i][j] = l1_error[i][j]*nonlin(l1[i][j],true);
+			l2_delta = mul(l2_error,nonlin(l2,true));
+			l1_error = dot(l2_delta,transpose(syn1));
+			l1_delta = mul(l1_error,nonlin(l1,true));
 			// update weights
+			syn1_updt = dot(transpose(l1),l2_delta);
+			for (i = 0; i < syn1_updt.length; i++)
+				for (j = 0; j < syn1_updt[0].length; j++)
+					syn1[i][j] += syn1_updt[i][j];
+				
 			syn0_updt = dot(transpose(l0),l1_delta);
 			for (i = 0; i < syn0_updt.length; i++)
-				syn0[i][0] += syn0_updt[i][0];
+				for (j = 0; j < syn0_updt[0].length; j++)
+					syn0[i][j] += syn0_updt[i][j];
+			printMatrix(transpose(l2));
 		}
-		System.out.println("\nPrediction : \n"+l1[0][0]+"\n"+l1[1][0]+"\n"+l1[2][0]+"\n"+l1[3][0]);
+		//printMatrix(l1);
+		//printMatrix(l2);
+		//System.out.println("\nPrediction : \n"+l2[0][0]+"\n"+l2[1][0]+"\n"+l2[2][0]+"\n"+l2[3][0]);
 	}
-	public static double nonlin(double x, boolean deriv)
+	public static double[][] nonlin(double x[][], boolean deriv)
 	{
-		if (deriv)
-			return x*(1-x);
-		else
-			return 1/(1+Math.exp(-x));
+		double y[][] = new double[x.length][x[0].length];
+		int i, j;
+		for (i = 0; i < x.length; i++) {
+			for (j = 0; j < x[0].length; j++) {
+				if (deriv)
+					y[i][j] = x[i][j]*(1-x[i][j]);
+				else
+					y[i][j] = 1/(1+Math.exp(-x[i][j]));
+			}
+		}
+		return y;		
+	}
+	public static double[][] mul(double m1[][], double m2[][])
+	{
+		double m3[][] = new double[m1.length][m1[0].length];
+		int i, j;
+		for (i = 0; i < m1.length; i++)
+			for (j = 0; j < m1[0].length; j++)
+				m3[i][j] = m1[i][j]*m2[i][j];
+		return m3;
+	}
+	public static double[][] sub(double m1[][], double m2[][])
+	{
+		double m3[][] = new double[m1.length][m1[0].length];
+		int i, j;
+		for (i = 0; i < m1.length; i++)
+			for (j = 0; j < m1[0].length; j++)
+				m3[i][j] = m1[i][j]-m2[i][j];
+		return m3;
 	}
 	public static double[][] transpose(double m1[][])
 	{
@@ -72,66 +124,16 @@ class nn
 		}
 		return m3;
 	}
+	public static void printMatrix(double m[][])
+	{
+		int i, j;
+		DecimalFormat df = new DecimalFormat("0.0000"); 
+		for (i = 0; i < m.length; i++) {
+			for (j = 0; j < m[0].length; j++)
+				System.out.print(df.format(m[i][j])+"\t");
+			System.out.println();
+		}
+	}
 	
 
 }
-
-
-/*
-X = np.array([ [0,0,1],[0,1,1],[1,0,1],[1,1,1] ])
-y = np.array([[0,1,1,0]]).T
-syn0 = 2*np.random.random((3,4)) - 1
-syn1 = 2*np.random.random((4,1)) - 1
-for j in xrange(60000):
-	l1 = 1/(1+np.exp(-(np.dot(X,syn0))))
-	l2 = 1/(1+np.exp(-(np.dot(l1,syn1))))
-	l2_delta = (y - l2)*(l2*(1-l2))
-	l1_delta = l2_delta.dot(syn1.T) * (l1 * (1-l1))
-	syn1 += l1.T.dot(l2_delta)
-	syn0 += X.T.dot(l1_delta)
-*/
-
-
-/*
-import numpy as np
-
-# sigmoid function
-def nonlin(x,deriv=False):
-	if(deriv==True):
-		return x*(1-x)
-	return 1/(1+np.exp(-x))
- 
-# input dataset
-X = np.array([  [0,0,1],
-[0,1,1],
-[1,0,1],
-[1,1,1] ])
- 
-# output dataset           
-y = np.array([[0,0,1,1]]).T
- 
-# seed random numbers to make calculation deterministic (just a good practice)
-np.random.seed(1)
- 
-# initialize weights randomly with mean 0
-syn0 = 2*np.random.random((3,1)) - 1
- 
-for iter in xrange(10000):
- 
-# forward propagation
-l0 = X
-l1 = nonlin(np.dot(l0,syn0))
- 
-# how much did we miss?
-l1_error = y - l1
- 
-# multiply how much we missed by the
-# slope of the sigmoid at the values in l1
-l1_delta = l1_error * nonlin(l1,True)
- 
-# update weights
-syn0 += np.dot(l0.T,l1_delta)
- 
-print "Output After Training:"
-print l1
-*/
